@@ -62,6 +62,8 @@ func main() {
 	mainCommands.Commands = make(map[string]func(*state, command) error)
 	mainCommands.register("login", handlerLogin)
 	mainCommands.register("register", handlerRegister)
+	mainCommands.register("reset", handlerReset)
+	mainCommands.register("users", handlerUsers)
 
 	if len(os.Args) < 2 {
 		log.Fatal("Error: No command given")
@@ -122,6 +124,27 @@ func handlerRegister(s *state, cmd command) error {
 	}
 
 	fmt.Printf("User %q was created: %v\n", username, user)
+
+	return nil
+}
+
+func handlerReset(s *state, _ command) error {
+	return s.DB.ResetUsers(context.Background())
+}
+
+func handlerUsers(s *state, _ command) error {
+	users, err := s.DB.GetUsers(context.Background())
+	if err != nil {
+		return nil
+	}
+
+	for _, user := range users {
+		if s.Config.CurrentUser == user.Name {
+			fmt.Printf("%s (current)\n", user.Name)
+		} else {
+			fmt.Println(user.Name)
+		}
+	}
 
 	return nil
 }
