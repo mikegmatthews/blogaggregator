@@ -64,6 +64,9 @@ func main() {
 	mainCommands.register("register", handlerRegister)
 	mainCommands.register("reset", handlerReset)
 	mainCommands.register("users", handlerUsers)
+	mainCommands.register("agg", handlerAgg)
+	mainCommands.register("addfeed", handlerAddFeed)
+	mainCommands.register("feeds", handlerFeeds)
 
 	if len(os.Args) < 2 {
 		log.Fatal("Error: No command given")
@@ -76,19 +79,19 @@ func main() {
 
 	err = mainCommands.run(&mainState, nextCommand)
 	if err != nil {
-		log.Fatalf("Error running command %q: %v", nextCommand.Name, err)
+		log.Fatalf("Error running command %q: %v\n", nextCommand.Name, err)
 	}
 }
 
 func handlerLogin(s *state, cmd command) error {
 	if len(cmd.Args) < 1 {
-		return fmt.Errorf("Login requires a username.\n")
+		return fmt.Errorf("Login requires a username.")
 	}
 
 	username := cmd.Args[0]
 	_, err := s.DB.GetUser(context.Background(), username)
 	if err != nil {
-		return fmt.Errorf("Cannot login with unknown user %q.\n", username)
+		return fmt.Errorf("Cannot login with unknown user %q.", username)
 	}
 
 	err = s.Config.SetUser(username)
@@ -103,7 +106,7 @@ func handlerLogin(s *state, cmd command) error {
 
 func handlerRegister(s *state, cmd command) error {
 	if len(cmd.Args) < 1 {
-		return fmt.Errorf("Register requires a username.\n")
+		return fmt.Errorf("Register requires a username.")
 	}
 
 	username := cmd.Args[0]
@@ -115,7 +118,7 @@ func handlerRegister(s *state, cmd command) error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("Error creating user: %v\n", err)
+		return fmt.Errorf("Error creating user: %v", err)
 	}
 
 	err = s.Config.SetUser(username)
@@ -144,6 +147,63 @@ func handlerUsers(s *state, _ command) error {
 		} else {
 			fmt.Println(user.Name)
 		}
+	}
+
+	return nil
+}
+
+func handlerAgg(s *state, _cmd command) error {
+	feedUrl := "https://www.wagslane.dev/index.xml"
+
+	rssFeed, err := fetchFeed(context.Background(), feedUrl)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%v+\n", rssFeed)
+
+	return nil
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.Args) < 2 {
+		return fmt.Errorf("addFeed requires a name and URL.")
+	}
+
+	currentUser, err := s.DB.GetUser(context.Background(), s.Config.CurrentUser)
+	if err != nil {
+		return err
+	}
+
+	feedName := cmd.Args[0]
+	feedUrl := cmd.Args[1]
+	feed, err := s.DB.CreateFeed(context.Background(), database.CreateFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      feedName,
+		Url:       feedUrl,
+		UserID:    currentUser.ID,
+	})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%v\n", feed)
+
+	return nil
+}
+
+func handlerFeeds(s *state, cmd command) error {
+	feedsRow, err := s.DB.GetFeeds(context.Background())
+	if err != nil {
+		return err
+	}
+
+	for _, feed := range feedsRow {
+		fmt.Printf("Feed %q:\n", feed.Name)
+		fmt.Printf("  URL: %s\n", feed.Url)
+		fmt.Printf("  Created by: %s\n", feed.UserName)
 	}
 
 	return nil
