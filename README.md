@@ -6,6 +6,16 @@ This tool requires [PostgreSQL](https://www.postgresql.org/download/ "PostgreSQL
 To install the tool, run:
 `go install https://github.com/mikegmatthews/blogaggregator`
 
+## Config
+
+Create a `.gatorconfig.json` file in your home directory with the following structure:
+
+```json
+{
+  "db_url": "postgres://username:@localhost:5432/database?sslmode=disable"
+}
+```
+
 # Tool Usage
 Once installed the application can be run with `gator <command> [options]`
 ## Commands
