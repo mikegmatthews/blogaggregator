@@ -155,17 +155,21 @@ func handlerUsers(s *state, _ command) error {
 	return nil
 }
 
-func handlerAgg(s *state, _cmd command) error {
-	feedUrl := "https://www.wagslane.dev/index.xml"
-
-	rssFeed, err := fetchFeed(context.Background(), feedUrl)
+func handlerAgg(s *state, cmd command) error {
+	if len(cmd.Args) < 1 {
+		return fmt.Errorf("agg requires a time between requests (1s, 1m, 1h, etc.)")
+	}
+	timeBtwnReqs, err := time.ParseDuration(cmd.Args[0])
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("%v+\n", rssFeed)
+	fmt.Printf("Collecting feeds every %s.\n", timeBtwnReqs)
 
-	return nil
+	ticker := time.NewTicker(timeBtwnReqs)
+	for ; ; <-ticker.C {
+		scrapeFeeds(s)
+	}
 }
 
 func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
@@ -287,6 +291,30 @@ func handlerUnfollow(s *state, cmd command, currentUser database.User) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func scrapeFeeds(s *state) error {
+	nextFetch, err := s.DB.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return err
+	}
+
+	err = s.DB.MarkFeedFetched(context.Background(), nextFetch.ID)
+	if err != nil {
+		return err
+	}
+
+	rssFeeds, err := fetchFeed(context.Background(), nextFetch.Url)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s Items:\n", rssFeeds.Channel.Title)
+	for _, item := range rssFeeds.Channel.Item {
+		fmt.Println(item.Title)
 	}
 
 	return nil
