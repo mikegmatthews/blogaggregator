@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,6 +72,7 @@ func main() {
 	mainCommands.register("follow", middlewareLoggedIn(handlerFollow))
 	mainCommands.register("following", middlewareLoggedIn(handlerFollowing))
 	mainCommands.register("unfollow", middlewareLoggedIn(handlerUnfollow))
+	mainCommands.register("browse", middlewareLoggedIn(handlerBrowse))
 
 	if len(os.Args) < 2 {
 		log.Fatal("Error: No command given")
@@ -314,7 +317,59 @@ func scrapeFeeds(s *state) error {
 
 	fmt.Printf("%s Items:\n", rssFeeds.Channel.Title)
 	for _, item := range rssFeeds.Channel.Item {
-		fmt.Println(item.Title)
+		pubDate, validErr := time.Parse("Mon, 02 Jan 2006 15:04:05 -0700", item.PubDate)
+
+		_, err = s.DB.CreatePost(context.Background(), database.CreatePostParams{
+			ID:        uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			Title:     item.Title,
+			Url:       item.Link,
+			Description: sql.NullString{
+				String: item.Description,
+				Valid:  item.Description != "",
+			},
+			PublishedAt: sql.NullTime{
+				Time:  pubDate,
+				Valid: validErr == nil,
+			},
+			FeedID: nextFetch.ID,
+		})
+		if err != nil && !strings.Contains(err.Error(), "duplicate key value") {
+			fmt.Printf("Error creating entry for post from %s: %v\n", nextFetch.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func handlerBrowse(s *state, cmd command, currentUser database.User) error {
+	var postLimit uint64 = 2
+	if len(cmd.Args) > 0 {
+		parsedLimit, err := strconv.ParseUint(cmd.Args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("Error parsing browse limit: %v", err)
+		} else {
+			postLimit = parsedLimit
+		}
+	}
+
+	posts, err := s.DB.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: currentUser.ID,
+		Limit:  int32(postLimit),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	for _, post := range posts {
+		fmt.Println(post.Title)
+		fmt.Println(post.Url)
+		if post.PublishedAt.Valid {
+			fmt.Printf("Published On: %s\n",
+				post.PublishedAt.Time.Format("2 Jan 2006 15:04"))
+		}
 	}
 
 	return nil
